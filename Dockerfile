@@ -1,14 +1,12 @@
-FROM node:18-alpine
-
-RUN mkdir -p /home/app
-
-COPY app/package.json /home/app/
-COPY app/public/ /home/app/public/
-COPY app/views /home/app/views/
-COPY app/index.js /home/app
-
+# Builder (installation des dépendances)
+FROM node:18-alpine as builder
 WORKDIR /home/app
-
+COPY app/package*.json ./
 RUN npm install
+COPY app/ ./
 
-CMD ["node","index.js"]
+# Serveur Nginx (servir directement views/)
+FROM nginx:alpine
+COPY --from=builder /home/app/views /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
