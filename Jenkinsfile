@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'xanas0/tp_aws' // Replace with your Docker image name
+        DOCKER_IMAGE = 'xanas0/tp_aws'
         VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
     }
 
@@ -19,7 +19,7 @@ pipeline {
             steps {
                 script {
                     powershell """
-                        docker build -t "$env:DOCKER_IMAGE:$env:VERSION" .
+                        docker build -t "${env:DOCKER_IMAGE}:${env:VERSION}" .
                     """
                 }
             }
@@ -31,13 +31,13 @@ pipeline {
                     powershell """
                         try {
                             # Verify image exists locally
-                            \$imageExists = docker images -q "$env:DOCKER_IMAGE:$env:VERSION"
+                            \$imageExists = docker images -q "${env:DOCKER_IMAGE}:${env:VERSION}"
                             if (-not \$imageExists) {
-                                throw "Image $env:DOCKER_IMAGE:$env:VERSION doesn't exist locally"
+                                throw "Image ${env:DOCKER_IMAGE}:${env:VERSION} doesn't exist locally"
                             }
 
                             # Run container
-                            docker run -d -p 8081:80 --name test-container "$env:DOCKER_IMAGE:$env:VERSION"
+                            docker run -d -p 8081:80 --name test-container "${env:DOCKER_IMAGE}:${env:VERSION}"
                             Start-Sleep -Seconds 10
 
                             # Test application
@@ -72,7 +72,7 @@ pipeline {
                     ]) {
                         powershell """
                             docker logout
-                            docker login -u "$env:DOCKER_USER" -p "$env:DOCKER_PASS"
+                            docker login -u "${env:DOCKER_USER}" -p "${env:DOCKER_PASS}"
 
                             if (\$LASTEXITCODE -ne 0) {
                                 throw "Docker authentication failed"
@@ -89,7 +89,7 @@ pipeline {
             steps {
                 script {
                     powershell """
-                        docker push "$env:DOCKER_IMAGE:$env:VERSION"
+                        docker push "${env:DOCKER_IMAGE}:${env:VERSION}"
                     """
                 }
             }
@@ -99,7 +99,7 @@ pipeline {
     post {
         cleanup {
             powershell """
-                docker rmi "$env:DOCKER_IMAGE:$env:VERSION" -f | Out-Null
+                docker rmi "${env:DOCKER_IMAGE}:${env:VERSION}" -f | Out-Null
             """
         }
     }
