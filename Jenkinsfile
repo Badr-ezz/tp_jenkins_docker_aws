@@ -5,7 +5,6 @@ pipeline {
         DOCKER_IMAGE = 'xanas0/tp_aws'
         VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
         REVIEW_ADRESS_IP = "98.81.203.203"
-        AWS_SSH_KEY = credentials('ezziyati-cle.pem')
     }
 
     stages {
