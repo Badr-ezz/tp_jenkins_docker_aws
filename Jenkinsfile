@@ -4,6 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'xanas0/tp_aws'
         VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
+        REVIEW_ADRESS_IP = "98.81.203.203"
     }
 
     stages {
@@ -19,7 +20,7 @@ pipeline {
             steps {
                 script {
                     powershell """
-                        docker build -t "${env:DOCKER_IMAGE}:${env:VERSION}" .
+                        docker build -t ${DOCKER_IMAGE}:${VERSION} .
                     """
                 }
             }
@@ -30,17 +31,14 @@ pipeline {
                 script {
                     powershell """
                         try {
-                            # Verify image exists locally
-                            \$imageExists = docker images -q "${env:DOCKER_IMAGE}:${env:VERSION}"
+                            \$imageExists = docker images -q "${DOCKER_IMAGE}:${VERSION}"
                             if (-not \$imageExists) {
-                                throw "Image ${env:DOCKER_IMAGE}:${env:VERSION} doesn't exist locally"
+                                throw "Image ${DOCKER_IMAGE}:${VERSION} doesn't exist locally"
                             }
 
-                            # Run container
-                            docker run -d -p 8081:80 --name test-container "${env:DOCKER_IMAGE}:${env:VERSION}"
+                            docker run -d -p 8081:80 --name test-container "${DOCKER_IMAGE}:${VERSION}"
                             Start-Sleep -Seconds 10
 
-                            # Test application
                             \$response = Invoke-WebRequest -Uri "http://localhost:8081" -UseBasicParsing -ErrorAction Stop
                             if (\$response.StatusCode -ne 200) { 
                                 throw "HTTP Status \$response.StatusCode" 
@@ -51,7 +49,6 @@ pipeline {
                             docker logs test-container
                             exit 1
                         } finally {
-                            # Cleanup container
                             docker stop test-container -t 1 | Out-Null
                             docker rm test-container -f | Out-Null
                         }
@@ -62,22 +59,20 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                script {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'docker-hub-creds',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )
-                    ]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'docker-hub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    script {
                         powershell """
                             docker logout
-                            docker login -u "${env:DOCKER_USER}" -p "${env:DOCKER_PASS}"
-
+                            docker login -u "${DOCKER_USER}" -p "${DOCKER_PASS}"
                             if (\$LASTEXITCODE -ne 0) {
                                 throw "Docker authentication failed"
                             }
-
                             Write-Host "Successfully authenticated with Docker Hub"
                         """
                     }
@@ -89,8 +84,53 @@ pipeline {
             steps {
                 script {
                     powershell """
-                        docker push "${env:DOCKER_IMAGE}:${env:VERSION}"
+                        docker push "${DOCKER_IMAGE}:${VERSION}"
                     """
+                }
+            }
+        }
+
+        stage('Deploy to Review') {
+            steps {
+                withCredentials([file(credentialsId: 'aws-key.pem', variable: 'SSH_KEY')]) {
+                    script {
+                        powershell """
+                            \$tempKey = "\$env:TEMP\\aws-key-\$env:BUILD_NUMBER.pem"
+
+                            # Save key with correct line endings
+                            [System.IO.File]::WriteAllText(
+                                \$tempKey,
+                                [System.IO.File]::ReadAllText("\$env:SSH_KEY").Replace("`r`n","`n"),
+                                [System.Text.Encoding]::ASCII
+                            )
+
+                            icacls \$tempKey /inheritance:r
+                            icacls \$tempKey /grant:r "\$env:USERNAME:(R)"
+                            icacls \$tempKey /grant:r "SYSTEM:(R)"
+                            
+                            \$sshCommand = "docker pull ${DOCKER_IMAGE}:${VERSION} && " +
+                                           "docker stop review-app || true && " +
+                                           "docker rm review-app || true && " +
+                                           "docker run -d -p 80:80 --name review-app ${DOCKER_IMAGE}:${VERSION}"
+
+                            \$process = Start-Process -FilePath "ssh" `
+                                -ArgumentList @(
+                                    "-i", "\$tempKey",
+                                    "-o", "StrictHostKeyChecking=no",
+                                    "ubuntu@${REVIEW_ADRESS_IP}",
+                                    \$sshCommand
+                                ) `
+                                -NoNewWindow `
+                                -PassThru `
+                                -Wait
+
+                            if (\$process.ExitCode -ne 0) {
+                                throw "SSH command failed with exit code \$($process.ExitCode)"
+                            }
+
+                            Remove-Item "\$tempKey" -Force -ErrorAction SilentlyContinue
+                        """
+                    }
                 }
             }
         }
@@ -99,7 +139,7 @@ pipeline {
     post {
         cleanup {
             powershell """
-                docker rmi "${env:DOCKER_IMAGE}:${env:VERSION}" -f | Out-Null
+                docker rmi "${DOCKER_IMAGE}:${VERSION}" -f | Out-Null
             """
         }
     }
