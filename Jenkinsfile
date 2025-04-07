@@ -92,7 +92,7 @@ pipeline {
 
         stage('Deploy to Review') {
             steps {
-                withCredentials([file(credentialsId: 'ezziyati-cle.pem', variable: 'SSH_KEY')]) {
+                withCredentials([file(credentialsId: 'ezziyati-cle', variable: 'SSH_KEY')]) {
                     script {
                         // 1. Prepare the key file with proper permissions
                         powershell '''
