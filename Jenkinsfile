@@ -179,7 +179,7 @@ pipeline {
                                         "-i", $tempKey,
                                         "-o", "StrictHostKeyChecking=no",
                                         "-o", "ConnectTimeout=30",
-                                        "ubuntu@${env:STAGING_IP}",
+                                        "ubuntu@${env:STAGING_ADRESS_IP}",
                                         $commands
                                     ) -NoNewWindow -PassThru -Wait
                                     
