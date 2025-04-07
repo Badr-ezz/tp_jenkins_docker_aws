@@ -94,47 +94,53 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'ezziyati-cle.pem', variable: 'SSH_KEY')]) {
                     script {
-                        powershell """
-                            \$tempKey = "\$env:TEMP\\aws-key-\$env:BUILD_NUMBER.pem"
-
-                            # Save key with correct line endings
+                        // 1. Prepare the key file with proper permissions
+                        powershell '''
+                            $tempKey = "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem"
+                            
+                            # Copy key content with Unix line endings
                             [System.IO.File]::WriteAllText(
-                                \$tempKey,
-                                [System.IO.File]::ReadAllText("\$env:SSH_KEY").Replace("`r`n","`n"),
+                                $tempKey,
+                                [System.IO.File]::ReadAllText($env:SSH_KEY).Replace("`r`n","`n"),
                                 [System.Text.Encoding]::ASCII
                             )
-
-                            icacls \$tempKey /inheritance:r
-                            icacls \$tempKey /grant:r "\$env:USERNAME:(R)"
-                            icacls \$tempKey /grant:r "SYSTEM:(R)"
                             
-                            \$sshCommand = "docker pull ${DOCKER_IMAGE}:${VERSION} && " +
-                                           "docker stop review-app || true && " +
-                                           "docker rm review-app || true && " +
-                                           "docker run -d -p 80:80 --name review-app ${DOCKER_IMAGE}:${VERSION}"
-
-                            \$process = Start-Process -FilePath "ssh" `
+                            # Set strict permissions
+                            icacls $tempKey /inheritance:r
+                            icacls $tempKey /grant:r "$env:USERNAME:(R)"
+                            icacls $tempKey /grant:r "SYSTEM:(R)"
+                        '''
+                        
+                        // 2. Execute deployment commands with proper waiting
+                        powershell '''
+                            $sshCommand = "docker pull ${env:DOCKER_IMAGE}:${env:VERSION} && " +
+                                          "docker stop review-app || true && " +
+                                          "docker rm review-app || true && " +
+                                          "docker run -d -p 80:80 --name review-app ${env:DOCKER_IMAGE}:${env:VERSION}"
+                            
+                            $process = Start-Process -FilePath "ssh" `
                                 -ArgumentList @(
-                                    "-i", "\$tempKey",
+                                    "-i", "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem",
                                     "-o", "StrictHostKeyChecking=no",
-                                    "ubuntu@${REVIEW_ADRESS_IP}",
-                                    \$sshCommand
+                                    "ubuntu@${env:REVIEW_IP}",
+                                    $sshCommand
                                 ) `
                                 -NoNewWindow `
                                 -PassThru `
                                 -Wait
-
-                            if (\$process.ExitCode -ne 0) {
-                                throw "SSH command failed with exit code \$($process.ExitCode)"
+                            
+                            if ($process.ExitCode -ne 0) {
+                                throw "SSH command failed with exit code $($process.ExitCode)"
                             }
-
-                            Remove-Item "\$tempKey" -Force -ErrorAction SilentlyContinue
-                        """
+                        '''
+                        
+                        // 3. Clean up
+                        powershell '''
+                            Remove-Item "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem" -Force -ErrorAction SilentlyContinue
+                        '''
                     }
                 }
             }
         }
-    }
-
-    
+    }    
 }
