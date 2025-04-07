@@ -137,11 +137,5 @@ pipeline {
         }
     }
 
-    post {
-        cleanup {
-            powershell """
-                docker rmi "${DOCKER_IMAGE}:${VERSION}" -f | Out-Null
-            """
-        }
-    }
+    
 }
