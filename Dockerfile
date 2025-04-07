@@ -1,14 +1,11 @@
-FROM node:18-alpine
+# Utilise une image Nginx officielle comme base
+FROM nginx:latest
 
-RUN mkdir -p /home/app
+# Copie les fichiers de l'application dans le répertoire de Nginx
+COPY app /usr/share/nginx/html
 
-COPY app/package.json /home/app/
-COPY app/public/ /home/app/public/
-COPY app/views /home/app/views/
-COPY app/index.js /home/app
+# Expose le port 80
+EXPOSE 80
 
-WORKDIR /home/app
-
-RUN npm install
-
-CMD ["node","index.js"]
+# Commande pour démarrer Nginx
+CMD ["nginx", "-g", "daemon off;"]
