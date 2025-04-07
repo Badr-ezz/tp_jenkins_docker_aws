@@ -93,7 +93,7 @@ pipeline {
 
         stage('Deploy to Review') {
             steps {
-                withCredentials([file(credentialsId: 'aws-key.pem', variable: 'SSH_KEY')]) {
+                withCredentials([file(credentialsId: 'ezziyati-cle.pem', variable: 'SSH_KEY')]) {
                     script {
                         powershell """
                             \$tempKey = "\$env:TEMP\\aws-key-\$env:BUILD_NUMBER.pem"
