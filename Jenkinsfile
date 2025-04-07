@@ -5,6 +5,7 @@ pipeline {
         DOCKER_IMAGE = 'xanas0/tp_aws'
         VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
         REVIEW_ADRESS_IP = "98.81.203.203"
+        STAGING_ADRESS_IP = "3.83.251.245"
     }
 
     stages {
@@ -137,6 +138,67 @@ pipeline {
                         // 3. Clean up
                         powershell '''
                             Remove-Item "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem" -Force -ErrorAction SilentlyContinue
+                        '''
+                    }
+                }
+            }
+        }
+        stage('Deploy to Staging') {
+            steps {
+                withCredentials([file(credentialsId: 'ezziyati-cle', variable: 'SSH_KEY')]) {
+                    script {
+                        powershell '''
+                            $tempKey = "$env:TEMP\\aws-key-staging-$env:BUILD_NUMBER.pem"
+                            
+                            # Create key file
+                            [System.IO.File]::WriteAllText(
+                                $tempKey,
+                                [System.IO.File]::ReadAllText($env:SSH_KEY).Replace("`r`n","`n"),
+                                [System.Text.Encoding]::ASCII
+                            )
+                            
+                            # Set permissions
+                            icacls $tempKey /inheritance:r
+                            icacls $tempKey /grant:r "$env:USERNAME:(R)"
+                            icacls $tempKey /grant:r "SYSTEM:(R)"
+                            
+                            # Deployment commands
+                            $commands = @(
+                                "docker pull ${env:DOCKER_IMAGE}:${env:VERSION}",
+                                "docker stop staging-app || true",
+                                "docker rm staging-app || true",
+                                "docker run -d -p 80:80 --name staging-app ${env:DOCKER_IMAGE}:${env:VERSION}"
+                            ) -join " && "
+                            
+                            # Execute with retries
+                            $maxRetries = 3
+                            $retryCount = 0
+                            do {
+                                try {
+                                    $process = Start-Process ssh -ArgumentList @(
+                                        "-i", $tempKey,
+                                        "-o", "StrictHostKeyChecking=no",
+                                        "-o", "ConnectTimeout=30",
+                                        "ubuntu@${env:STAGING_IP}",
+                                        $commands
+                                    ) -NoNewWindow -PassThru -Wait
+                                    
+                                    if ($process.ExitCode -ne 0) {
+                                        throw "SSH failed with exit code $($process.ExitCode)"
+                                    }
+                                    break
+                                } catch {
+                                    $retryCount++
+                                    if ($retryCount -ge $maxRetries) {
+                                        throw
+                                    }
+                                    Start-Sleep -Seconds 10
+                                    Write-Host "Retrying deployment ($retryCount/$maxRetries)..."
+                                }
+                            } while ($true)
+                            
+                            # Cleanup
+                            Remove-Item $tempKey -Force -ErrorAction SilentlyContinue
                         '''
                     }
                 }
