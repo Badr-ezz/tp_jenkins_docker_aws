@@ -6,7 +6,7 @@ pipeline {
         VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
         REVIEW_ADRESS_IP = "98.81.203.203"
         STAGING_ADRESS_IP = "3.83.251.245"
-        PRODUCTION_ADRESS_IP = "13.60.156.76"
+        PRODUCTION_ADRESS_IP = "52.91.204.235"
     }
 
     stages {
