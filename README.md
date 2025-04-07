@@ -9,9 +9,9 @@
 ## Sommaire
 1. [Introduction](#introduction)
 2. [Présentation du DockerFile](#présentation-du-dockerfile)
-3. [Test et validation du conteneur API](#test-et-validation-du-conteneur-api)
-4. [Déploiement avec Docker Compose](#déploiement-avec-docker-compose)
-5. [Mise en place du registre privé Docker](#mise-en-place-du-registre-privé-docker)
+3. [Préparation de la machine aws Ubuntu](#préparation-de-la-machine-aws-ubuntu)
+4. [Sortie du console de pipline](#sortie-du-console-de-pipline)
+5. [Résultats](#résultats)
 
 ---
 
@@ -52,201 +52,154 @@ CMD ["nginx", "-g", "daemon off;"]
 
 ## Préparation de la machine aws Ubuntu
 
-![image1](C:/Users/Osaka Gaming Maroc/Desktop/tp_jenkins_docker_aws/screens/image1.jpg)
+![image1](./screens/image1.jpg)
+![image2](./screens/image2.jpg)
+![image3](./screens/image3.jpg)
+![image4](./screens/image4.jpg)
+![image5](./screens/image5.jpg)
+![image6](./screens/image6.jpg)
+![image7](./screens/image7.jpg)
+![image8](./screens/image8.jpg)
+![image9](./screens/image9.jpg)
+![image10](./screens/image10.jpg)
 
 ---
 
-###  Démarage de container: 
-![démarage de container ](./screens/runningcontainer.png)
----
 
-###  Récupération des données d’apres le fichier student_age.json: 
-![démarage de container ](./screens/testing%20the%20api.png)
----
 
-## Déploiement-avec-docker-compose
+## explication de Jenkinsfile
 
-### Explication du fichier docker compose : 
+* Ce Jenkinsfile définit un pipeline CI/CD complet pour déployer une application conteneurisée (Docker) sur trois environnements AWS distincts (Review, Staging, Production) en utilisant Jenkins. Voici une analyse détaillée de chaque étape :
 
-####  1. Définition de la version de Docker Compose :
+### 1. Configuration Globale
 
-```yaml
-version: '3'
+```groovy
+environment {
+    DOCKER_IMAGE = 'xanas0/tp_aws'
+    VERSION = "${env.BUILD_NUMBER ?: 'latest'}"
+    REVIEW_ADRESS_IP = "98.81.203.203"
+    STAGING_ADRESS_IP = "3.83.251.245"
+    PRODUCTION_ADRESS_IP = "52.91.204.235"
+}
 ```
-* Spécifie que le fichier utilise la version 3 de
- Docker Compose, une version stable et
- largement utilisée.
-
-####  2. Définition des services : 
-```yaml
-services:
-```
-
-Ce fichier définit deux services :
-- **supmit_api** → L’API Flask qui fournit la liste des étudiants.
-- **website** → L’application web en PHP qui consomme l’API.
+#### Variables d'environnement :
 
 
-#### 3. Service : supmit_api (API Flask)
-```yaml
-  supmit_api :
-    image: supmit:latest  
-    ports:
-      - "5000:5000"  
-    volumes:
-      - ./simple_api/student_age.json:/data/student_age.json  
-    networks:
-      - student-net  
+* DOCKER_IMAGE : Nom de l'image Docker sur Docker Hub.
+
+* VERSION : Numéro de build Jenkins ou latest par défaut.
+
+* Adresses IP des instances AWS pour chaque environnement.
+
+### 2. Étapes du Pipeline : 
+
+#### Stage 1 : Checkout Code
+
+```groovy
+git branch: 'main', 
+    credentialsId: 'github-credentials', 
+    url: 'https://github.com/Badr-ezz/tp_jenkins_docker_aws.git'
 ```
 
-- **image**: supmit:latest(au lieu de supmit:1.0) → Utilise l’image
- Docker "supmit", construite précédemment, avec le tag latest.
-- **ports**:
-    - **5000:5000** → Mappe le port 5000 du conteneur sur le port
- 5000 de la machine hôte.
-- **volumes**:
-    - **./simple_api/student_age.json:/data/student_age.json** 
-        - **Monte le fichier student_age.json de l’hôte dans le
- dossier /data du conteneur pour que l’API puisse
- accéder aux données.**
- - **networks**:
- student-net → Ajoute le conteneur au réseau student-net,
- permettant la communication avec le frontend.
+ * Action : Récupère le code source depuis un dépôt Git (branche main).
 
-#### 4. Service : website (Application PHP + Apache)
+* Authentification : Utilise des identifiants Jenkins stockés (github-credentials).
 
-```yaml
-  website:
-    image: php:apache  
-    ports:
-      - "80:80"  
-    environment:
-      - USERNAME=root  
-      - PASSWORD=root  
-    volumes:
-      - ./website:/var/www/html  
-    depends_on:
-      - supmit_api  
-    networks:
-      - student-net
+
+#### Stage 2 : Build Docker Image
+
+```groovy 
+ docker build -t ${DOCKER_IMAGE}:${VERSION} . 
+```
+
+* Action : Construit l'image Docker à partir du Dockerfile présent dans le dépôt.
+
+* Tag : L'image est taguée avec le numéro de build Jenkins.
+
+
+
+#### Stage 3 : Test Image
+
+
+```powershell
+  docker run -d -p 8081:80 --name test-container "${DOCKER_IMAGE}:${VERSION}"
+Invoke-WebRequest -Uri "http://localhost:8081" -UseBasicParsing
 ```
 
 
-- **`image: php:apache`** : Utilise l’image officielle PHP avec Apache pour servir le site web.
-- **`ports:`**
-  - `80:80` : Mappe le port 80 du conteneur sur le port 80 de la machine hôte, rendant le site accessible via `http://localhost`.
-- **`environment:`**
-  - Définit les variables d’environnement `USERNAME` et `PASSWORD` (probablement utilisées pour l’authentification avec l’API).
-- **`volumes:`**
-  - `./website:/var/www/html` : Monte le dossier `./website` de l’hôte dans `/var/www/html` du conteneur pour que le site web puisse être servi.
-- **`depends_on:`**
-  - `submit_api` : Assure que l’API démarre avant le site web, évitant les erreurs de connexion au backend.
-- **`networks:`**
-  - `student-net` : Relie ce service au même réseau que l’API, permettant leur communication.
+* Action :
 
-#### 5. Définition du réseau : 
-```yaml
-networks:
-  student-net:
+1 - Lance un conteneur temporaire sur le port 8081.
+
+2 - Vérifie que l'application répond avec un statut HTTP 200.
+
+* Gestion des erreurs :
+
+En cas d'échec, les logs du conteneur sont affichés avant suppression.
+
+#### Stage 4 : Login to Docker Hub
+
+```groovy
+withCredentials([usernamePassword(...)]) {
+    docker login -u "${DOCKER_USER}" -p "${DOCKER_PASS}"
+}
 ```  
--  Définit un réseau Docker personnalisé (student-net)
- pour que les conteneurs puissent communiquer entre
- eux.
+* Action : Authentification sur Docker Hub avec des identifiants sécurisés stockés dans Jenkins (docker-hub-creds).
 
-### 6. Exécution de la commande docker-compose up -d
+* Sécurité : Les mots de passe ne sont pas exposés en clair.
 
-![démarage de docker-compose](./screens/runningdockercompose.png)
----
+#### Stage 5 : Push Docker Image
 
-![lister les étudiants via http://localhost:80](./screens/list_students.png)
+```groovy
+docker push "${DOCKER_IMAGE}:${VERSION}"
+```
+* Action : Publie l'image Docker sur Docker Hub pour la rendre disponible pour les déploiements.
 
+#### Stages 6-8 : Déploiements (Review/Staging/Production)
 
+* Mécanisme commun :
 
-## Mise en place du registre privé Docker
+1 - Préparation de la clé SSH :
 
-### explication du fichier docker-compose-registry : 
-#### - Services
-Les services définissent les conteneurs qui seront lancés par Docker Compose. Dans ce fichier, deux services sont définis : registry et registry-ui.
+ * La clé AWS est temporairement stockée et sécurisée avec icacls.
 
-#### Service registry : 
-```yaml
-registry:
-  image: registry:2  
-  container_name: registry
-  ports:
-    - "5000:5000"  
-  volumes:
-    - registry_data:/var/lib/registry 
-  networks:
-    - registry-net
+2 - Commandes SSH :
+
+```powershell
+docker pull ${env:DOCKER_IMAGE}:${env:VERSION}
+docker stop <env>-app || true
+docker run -d -p 80:80 --name <env>-app ${env:DOCKER_IMAGE}:${env:VERSION}
 ```
 
-- **image: registry:2** : Utilise l'image officielle de Docker Registry (version 2) pour créer le conteneur. Cette image permet de déployer un registre privé pour stocker des images Docker.
+* Télécharge la dernière image Docker.
 
-- **container_name**: registry : Donne un nom explicite au conteneur (registry) pour faciliter son identification.
+*  Remplace le conteneur existant (si applicable).
 
-- **ports: - "5000:5000"** : Mappe le port 5000 du conteneur sur le port 5000 de la machine hôte. Cela permet d'accéder au registre via http://localhost:5000.
+* Lance un nouveau conteneur exposé sur le port 80.
 
-- **volumes: - registry_data:/var/lib/registry** : Crée un volume Docker nommé registry_data et le monte dans le conteneur à l'emplacement /var/lib/registry. Ce volume est utilisé pour stocker les images Docker de manière persistante (les données ne sont pas perdues lorsque le conteneur est redémarré ou supprimé).
+3- Gestion des erreurs :
 
-- **networks: - registry-net** : Connecte ce service au réseau Docker personnalisé registry-net. Cela permet au registre de communiquer avec d'autres services sur le même réseau.
+* 3 tentatives maximum en cas d'échec de connexion SSH.
 
-### Service registry-ui
-```yaml
-registry-ui:
-  image: joxit/docker-registry-ui:latest 
-  container_name: registry-ui
-  ports:
-    - "8080:80" 
-  environment:
-    - REGISTRY_TITLE=SUPMIT Private Registry  
-    - REGISTRY_URL=http://localhost:5000 
-  depends_on:
-    - registry  
-  networks:
-    - registry-net
-```
-- **image: joxit/docker-registry-ui:latest** : Utilise l'image joxit/docker-registry-ui pour fournir une interface web conviviale pour gérer le registre Docker.
+#### Environnements cibles :
 
-- **container_name: registry-ui** : Donne un nom explicite au conteneur (registry-ui) pour faciliter son identification.
+* Review : Instance AWS à l'IP 98.81.203.203.
 
-- **ports: - "8080:80"** : Mappe le port 80 du conteneur sur le port 8080 de la machine hôte. Cela permet d'accéder à l'interface web via http://localhost:8080.
+* Staging : Instance AWS à l'IP 3.83.251.245.
 
-- **environment :** Définit des variables d'environnement pour configurer l'interface web :
+* Production : Instance AWS à l'IP 52.91.204.235.
 
-    - **REGISTRY_TITLE=SUPMIT Private Registry** : Définit le titre de l'interface web.
+## Sortie du console de pipline
 
-  - **REGISTRY_URL=http://localhost:5000**: Spécifie l'URL du registre Docker auquel l'interface web doit se connecter. Ici, elle pointe vers http://localhost:5000.
+![image11](./screens/image11.jpg)
+![image12](./screens/image12.jpg)
+![image13](./screens/image13.jpg)
+![image14](./screens/image14.jpg)
+![image15](./screens/image15.jpg)
+![image16](./screens/image16.jpg)
 
-- **depends_on: - registry** : Indique que le service registry-ui dépend du service registry. Cela garantit que le registre Docker démarre avant l'interface web.
+## Résultats
+![image17](./screens/image17.jpg)
+![image18](./screens/image18.jpg)
+![image19](./screens/image19.jpg)
 
-- **networks: - registry-net** : Connecte ce service au même réseau Docker personnalisé (registry-net) que le registre, permettant une communication entre les deux services.
-
-### 3. Volumes
-```yml
-volumes:
-  registry_data:
-```
-
-- **Explication** : Définit un volume Docker nommé registry_data. Ce volume est utilisé pour stocker les données du registre Docker de manière persistante. Il est monté dans le conteneur registry à l'emplacement /var/lib/registry.
-
-### 4. Réseaux
-```yml
-networks:
-  registry-net:
-```
-
-- **Explication :** Définit un réseau Docker personnalisé nommé registry-net. Ce réseau permet aux services registry et registry-ui de communiquer entre eux. Les conteneurs sur le même réseau peuvent se "voir" et interagir.
-
-## Test : 
-* Démarage de docker-compose-registry : 
-
- ![démarer docker-compose-registry](./screens/lanch%20docker-compose-registry.png)
-
-* push supmit image to localhost:5000
-
- ![push supmit image to localhost:5000](./screens/push%20supmit%20image%20on%20the%20registry.png)
-
- * push test : 
-
- ![push test](./screens/check%20supmit%20push.png)
