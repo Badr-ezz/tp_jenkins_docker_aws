@@ -96,30 +96,26 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'ezziyati-cle', variable: 'SSH_KEY')]) {
                     script {
-                        // 1. Prepare the key file with proper permissions
                         powershell '''
                             $tempKey = "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem"
-                            
-                            # Copy key content with Unix line endings
+
                             [System.IO.File]::WriteAllText(
                                 $tempKey,
                                 [System.IO.File]::ReadAllText($env:SSH_KEY).Replace("`r`n","`n"),
                                 [System.Text.Encoding]::ASCII
                             )
-                            
-                            # Set strict permissions
+
                             icacls $tempKey /inheritance:r
                             icacls $tempKey /grant:r "$env:USERNAME:(R)"
                             icacls $tempKey /grant:r "SYSTEM:(R)"
                         '''
-                        
-                        // 2. Execute deployment commands with proper waiting
+
                         powershell '''
                             $sshCommand = "docker pull ${env:DOCKER_IMAGE}:${env:VERSION} && " +
                                           "docker stop review-app || true && " +
                                           "docker rm review-app || true && " +
                                           "docker run -d -p 80:80 --name review-app ${env:DOCKER_IMAGE}:${env:VERSION}"
-                            
+
                             $process = Start-Process -FilePath "ssh" `
                                 -ArgumentList @(
                                     "-i", "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem",
@@ -130,13 +126,12 @@ pipeline {
                                 -NoNewWindow `
                                 -PassThru `
                                 -Wait
-                            
+
                             if ($process.ExitCode -ne 0) {
                                 throw "SSH command failed with exit code $($process.ExitCode)"
                             }
                         '''
-                        
-                        // 3. Clean up
+
                         powershell '''
                             Remove-Item "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem" -Force -ErrorAction SilentlyContinue
                         '''
@@ -144,34 +139,31 @@ pipeline {
                 }
             }
         }
+
         stage('Deploy to Staging') {
             steps {
                 withCredentials([file(credentialsId: 'ezziyati-cle', variable: 'SSH_KEY')]) {
                     script {
                         powershell '''
                             $tempKey = "$env:TEMP\\aws-key-staging-$env:BUILD_NUMBER.pem"
-                            
-                            # Create key file
+
                             [System.IO.File]::WriteAllText(
                                 $tempKey,
                                 [System.IO.File]::ReadAllText($env:SSH_KEY).Replace("`r`n","`n"),
                                 [System.Text.Encoding]::ASCII
                             )
-                            
-                            # Set permissions
+
                             icacls $tempKey /inheritance:r
                             icacls $tempKey /grant:r "$env:USERNAME:(R)"
                             icacls $tempKey /grant:r "SYSTEM:(R)"
-                            
-                            # Deployment commands
+
                             $commands = @(
                                 "docker pull ${env:DOCKER_IMAGE}:${env:VERSION}",
                                 "docker stop staging-app || true",
                                 "docker rm staging-app || true",
                                 "docker run -d -p 80:80 --name staging-app ${env:DOCKER_IMAGE}:${env:VERSION}"
                             ) -join " && "
-                            
-                            # Execute with retries
+
                             $maxRetries = 3
                             $retryCount = 0
                             do {
@@ -183,7 +175,7 @@ pipeline {
                                         "ubuntu@${env:STAGING_ADRESS_IP}",
                                         $commands
                                     ) -NoNewWindow -PassThru -Wait
-                                    
+
                                     if ($process.ExitCode -ne 0) {
                                         throw "SSH failed with exit code $($process.ExitCode)"
                                     }
@@ -197,42 +189,38 @@ pipeline {
                                     Write-Host "Retrying deployment ($retryCount/$maxRetries)..."
                                 }
                             } while ($true)
-                            
-                            # Cleanup
+
                             Remove-Item $tempKey -Force -ErrorAction SilentlyContinue
                         '''
                     }
                 }
             }
         }
+
         stage('Deploy to Production') {
             steps {
                 withCredentials([file(credentialsId: 'ezziyati-cle', variable: 'SSH_KEY')]) {
                     script {
                         powershell '''
                             $tempKey = "$env:TEMP\\aws-key-prod-$env:BUILD_NUMBER.pem"
-                            
-                            # Create key file
+
                             [System.IO.File]::WriteAllText(
                                 $tempKey,
                                 [System.IO.File]::ReadAllText($env:SSH_KEY).Replace("`r`n","`n"),
                                 [System.Text.Encoding]::ASCII
                             )
-                            
-                            # Set permissions
+
                             icacls $tempKey /inheritance:r
                             icacls $tempKey /grant:r "$env:USERNAME:(R)"
                             icacls $tempKey /grant:r "SYSTEM:(R)"
-                            
-                            # Deployment commands
+
                             $commands = @(
                                 "docker pull ${env:DOCKER_IMAGE}:${env:VERSION}",
                                 "docker stop prod-app || true",
                                 "docker rm prod-app || true",
                                 "docker run -d -p 80:80 --name prod-app ${env:DOCKER_IMAGE}:${env:VERSION}"
                             ) -join " && "
-                            
-                            # Execute with retries
+
                             $maxRetries = 3
                             $retryCount = 0
                             do {
@@ -244,7 +232,7 @@ pipeline {
                                         "ubuntu@${env:PRODUCTION_ADRESS_IP}",
                                         $commands
                                     ) -NoNewWindow -PassThru -Wait
-                                    
+
                                     if ($process.ExitCode -ne 0) {
                                         throw "SSH failed with exit code $($process.ExitCode)"
                                     }
@@ -258,14 +246,12 @@ pipeline {
                                     Write-Host "Retrying deployment ($retryCount/$maxRetries)..."
                                 }
                             } while ($true)
-                            
-                            # Cleanup
+
                             Remove-Item $tempKey -Force -ErrorAction SilentlyContinue
                         '''
                     }
                 }
             }
-        }        
+        }
     }
-    }    
 }
