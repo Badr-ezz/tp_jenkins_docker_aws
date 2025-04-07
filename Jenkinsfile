@@ -122,7 +122,7 @@ pipeline {
                                 -ArgumentList @(
                                     "-i", "$env:TEMP\\aws-key-$env:BUILD_NUMBER.pem",
                                     "-o", "StrictHostKeyChecking=no",
-                                    "ubuntu@${env:REVIEW_IP}",
+                                    "ubuntu@${env:REVIEW_ADRESS_IP}",
                                     $sshCommand
                                 ) `
                                 -NoNewWindow `
